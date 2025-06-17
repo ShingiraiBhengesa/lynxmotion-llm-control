@@ -33,4 +33,34 @@ This project enables natural language control of a Lynxmotion robotic arm (SSC-3
 ```bash
 git clone https://github.com/yourusername/lynxmotion-llm-control.git
 cd lynxmotion-llm-control
+ ```
+
+### 2. Create Virtial Environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set Up OpenAI API Key: Create .env file
+
+```bash
+OPENAI_API_KEY=your_api_key_here
+```
+
+### 5. Hardware Configuration
+
+- Hardware Configuration:
+- Update ARM_PORT in  ```bash  main.py (e.g., /dev/ttyUSB0 or COM3)```
+
+- Adjust arm dimensions in  ```bash arm_control/kinematics.py```
+
+- Verify servo limits in  ```bash config/joint_limits.json```
 
