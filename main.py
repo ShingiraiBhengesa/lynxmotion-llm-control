@@ -4,7 +4,7 @@ import cv2
 import time
 import os
 import json
-from arm_control.ssc32_controller import SSC32Controller
+from arm_control.arduino_controller import ArduinoController
 from arm_control.kinematics import calculate_ik
 from vision.camera import LogitechCamera
 from vision.detector import ObjectDetector
@@ -12,11 +12,7 @@ from llm.interface import LLMController
 from utils.safety import validate_position, check_joint_limits
 
 # --- Configurable Constants ---
-
-# ❗ CRITICAL: Update this with the COM port from your Windows Device Manager.
-# For example, if your robot is on COM4, change it to: ARM_PORT = 'COM4'
-ARM_PORT = 'COM4'  # Update this to your SSC-32U port
-
+ARM_PORT = 'COM4'
 CAMERA_INDEX = 0
 TEMP_IMAGE_PATH = "current_view.jpg"
 DEBUG_MODE = True
@@ -26,7 +22,6 @@ def save_debug_image(frame, command, llm_response):
     """Save debug image with LLM response overlaid."""
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     filename = f"debug/debug_{timestamp}.jpg"
-    # Ensure the debug directory exists
     if not os.path.exists("debug"):
         os.makedirs("debug")
     cv2.putText(frame, f"Command: {command}", (10, 30),
@@ -42,15 +37,14 @@ def main():
     if DEBUG_MODE and not os.path.exists("debug"):
         os.makedirs("debug")
 
-    # Initialize all components
     try:
-        arm = SSC32Controller(ARM_PORT)
+        arm = ArduinoController(ARM_PORT)
         camera = LogitechCamera(CAMERA_INDEX, RESOLUTION)
         detector = ObjectDetector()
         llm = LLMController()
     except Exception as e:
         print(f"❌ Error during initialization: {e}")
-        print("   Please ensure all hardware is connected and configurations (like ARM_PORT) are correct.")
+        print("   Please ensure the arm is connected to the correct COM port.")
         return
 
     print("🏠 Moving to home position...")
@@ -88,7 +82,7 @@ def main():
                 
                 angles = calculate_ik(x, y, z)
                 if angles is None:
-                    print(f"⚠️ KINEMATICS: Could not calculate a valid solution for position ({x}, {y}, {z}). It may be unreachable.")
+                    print(f"⚠️ KINEMATICS: Could not calculate a valid solution for position ({x}, {y}, {z}).")
                     continue
                 
                 if not check_joint_limits(angles):
@@ -98,18 +92,20 @@ def main():
                 arm.send_command(angles)
 
             elif command.get("command") == "GRIP":
-                # Note: The provided SSC32Controller doesn't have a 'set_gripper' method.
-                # You would need to implement gripper control logic.
-                # For now, we will print the intended action.
-                print(f" gripper action: {command.get('gripper')}")
-
+                gripper_state = command.get("gripper")
+                gripper_angles = {'open': 10, 'close': 80} 
+                
+                if gripper_state in gripper_angles:
+                    angle = gripper_angles[gripper_state]
+                    arm.send_command({'gripper': angle})
+                else:
+                    print(f"🤷 Unknown gripper command: {gripper_state}")
 
     except KeyboardInterrupt:
         print("\n🛑 Interrupted by user. Stopping...")
 
     finally:
-        # Gracefully shut down all components
-        print("shutting down...")
+        print("Shutting down...")
         if 'arm' in locals() and arm:
             arm.emergency_stop()
             arm.close()
