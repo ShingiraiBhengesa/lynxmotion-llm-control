@@ -90,5 +90,6 @@ def main():
         camera.release()
         print("✅ Shutdown complete.")
 
+
 if __name__ == "__main__":
     main()

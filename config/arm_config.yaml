@@ -1,6 +1,5 @@
 # Lynxmotion arm dimensions (mm)
-dimensions:
-  base_height: 60         # Distance from table to shoulder base
-  shoulder_length: 105    # Upper arm link
-  forearm_length: 105     # Forearm link
-  wrist_length: 50        # Wrist to gripper tip
+base_height: 110.0
+shoulder_length: 200.0
+forearm_length: 200.0
+wrist_length: 100.0
