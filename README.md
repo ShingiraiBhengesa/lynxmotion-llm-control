@@ -59,7 +59,8 @@ pip install -r requirements.txt
 
 Create a file named ```.env``` in the main project directory. This file will securely store your API key.
 
-```OPENAI_API_KEY=your_secret_api_key_here
+```
+OPENAI_API_KEY=your_secret_api_key_here
 ```
 
 
