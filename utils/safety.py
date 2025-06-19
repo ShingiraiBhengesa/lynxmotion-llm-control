@@ -9,9 +9,9 @@ def validate_position(x, y, z):
         return False
     if not (0 <= y <= 400):
         return False
-    # Adjusted minimum Z to prevent crashing into the table/exposed components
-    # You might need to change '50' based on your physical measurements
-    if not (50 <= z <= 250): 
+    # ADJUSTED: Z-axis minimum to 0 to allow reaching the table surface
+    # IMPORTANT: Adjust '0' to a small positive value (e.g., 5 or 10) if Z=0 still crashes physically.
+    if not (0 <= z <= 250): 
         return False
     return True
 

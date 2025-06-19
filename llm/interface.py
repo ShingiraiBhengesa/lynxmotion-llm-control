@@ -31,7 +31,7 @@ class LLMController:
                             {"type": "text", "text": user_input},
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"} 
+                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"} # FIXED: image_url format
                             }
                         ]
                     }
@@ -44,11 +44,11 @@ class LLMController:
             return {"error": f"LLM Error: {str(e)}"}
     
     def _create_system_prompt(self):
-        # UPDATED PROMPT: Added detailed workspace limits to guide the LLM
+        # UPDATED PROMPT: Added detailed workspace limits and Z=0 clarity
         return """You control a Lynxmotion robotic arm. The arm operates within a defined workspace.
         X-axis range: -300mm to 300mm
         Y-axis range: 0mm to 400mm
-        Z-axis range: 0mm to 250mm (Z is height, where 0 is the base height)
+        Z-axis range: 0mm (table surface) to 250mm (maximum height).
         
         Respond in JSON format with commands and target coordinates ONLY within these valid ranges:
         {
