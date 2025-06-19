@@ -31,7 +31,7 @@ class LLMController:
                             {"type": "text", "text": user_input},
                             {
                                 "type": "image_url",
-                                "image_url": f"data:image/jpeg;base64,{base64_image}"
+                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"} 
                             }
                         ]
                     }
@@ -44,12 +44,20 @@ class LLMController:
             return {"error": f"LLM Error: {str(e)}"}
     
     def _create_system_prompt(self):
-        return """You control a Lynxmotion robotic arm. Respond in JSON format:
+        # UPDATED PROMPT: Added detailed workspace limits to guide the LLM
+        return """You control a Lynxmotion robotic arm. The arm operates within a defined workspace.
+        X-axis range: -300mm to 300mm
+        Y-axis range: 0mm to 400mm
+        Z-axis range: 0mm to 250mm (Z is height, where 0 is the base height)
+        
+        Respond in JSON format with commands and target coordinates ONLY within these valid ranges:
         {
             "command": "MOVE|GRIP",
-            "target": [x,y,z],  // For MOVE only
+            "target": [x,y,z],  // For MOVE only, must be within workspace limits
             "gripper": "open|close"  // For GRIP only
-        }"""
+        }
+        Do not generate coordinates outside these bounds. Be precise with the target coordinates.
+        """
     
     def _encode_image(self, image_path):
         with open(image_path, "rb") as image_file:

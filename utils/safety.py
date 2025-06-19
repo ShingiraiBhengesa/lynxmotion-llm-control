@@ -9,7 +9,9 @@ def validate_position(x, y, z):
         return False
     if not (0 <= y <= 400):
         return False
-    if not (0 <= z <= 250):
+    # Adjusted minimum Z to prevent crashing into the table/exposed components
+    # You might need to change '50' based on your physical measurements
+    if not (50 <= z <= 250): 
         return False
     return True
 

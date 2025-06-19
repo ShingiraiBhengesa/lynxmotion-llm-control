@@ -12,8 +12,8 @@ from llm.interface import LLMController
 from utils.safety import validate_position, check_joint_limits
 
 # --- Configurable Constants ---
-ARM_PORT = 'COM4'
-CAMERA_INDEX = 0
+ARM_PORT = 'COM5'
+CAMERA_INDEX = 1
 TEMP_IMAGE_PATH = "current_view.jpg"
 DEBUG_MODE = True
 RESOLUTION = (1280, 720)
