@@ -21,11 +21,15 @@ def check_joint_limits(angles):
         'base': (0, 180),
         'shoulder': (30, 120),
         'elbow': (0, 180),
-        'wrist': (0, 180)
+        # ADJUSTED: Wrist joint limits to prevent self-collision
+        # MUST CHANGE (25, 180) to values that prevent your specific crash based on physical testing.
+        # Example: If crashing below 25 degrees, use (25, 180). If crashing above 160 degrees, use (0, 160).
+        'wrist': (25, 180) # Placeholder: Update this based on your physical observation and testing.
     }
     for joint, angle in angles.items():
         if joint in limits:
             low, high = limits[joint]
             if not (low <= angle <= high):
+                print(f"DEBUG: Joint '{joint}' angle {angle} outside limits ({low}, {high})") 
                 return False
     return True
