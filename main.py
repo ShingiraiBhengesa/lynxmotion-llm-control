@@ -12,7 +12,7 @@ from llm.interface import LLMController
 from utils.safety import validate_position, check_joint_limits
 
 # --- Configurable Constants ---
-ARM_PORT = 'COM4' # Make sure this is your correct COM port
+ARM_PORT = 'COM5' # Make sure this is your correct COM port
 CAMERA_INDEX = 0  # Make sure this is your correct camera index for Logitech
 TEMP_IMAGE_PATH = "current_view.jpg"
 DEBUG_MODE = True
