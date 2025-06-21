@@ -17,19 +17,18 @@ def validate_position(x, y, z):
 
 def check_joint_limits(angles):
     """Ensure angles are within safe limits"""
+    # Joint limits from the provided AL5D C++ code (in degrees)
     limits = {
-        'base': (0, 180),
-        'shoulder': (30, 120),
-        'elbow': (0, 180),
-        # ADJUSTED: Wrist joint limits to prevent self-collision
-        # YOU MUST CHANGE (25, 180) to values that prevent your specific crash based on physical testing.
-        # Example: If crashing below 25 degrees, use (25, 180). If crashing above 160 degrees, use (0, 160).
-        'wrist': (25, 180) # Placeholder: Update this based on your physical observation and testing.
+        'base': (0.0, 180.0),      # BAS_MIN, BAS_MAX
+        'shoulder': (20.0, 140.0), # SHL_MIN, SHL_MAX
+        'elbow': (20.0, 165.0),    # ELB_MIN, ELB_MAX
+        'wrist': (0.0, 180.0)      # WRI_MIN, WRI_MAX. These are broad, fine-tuning might be needed after testing.
+        # Gripper limit is handled separately in main.py
     }
     for joint, angle in angles.items():
         if joint in limits:
             low, high = limits[joint]
             if not (low <= angle <= high):
-                print(f"DEBUG: Joint '{joint}' angle {angle} outside limits ({low}, {high})") 
+                print(f"⚠️ SAFETY: Joint '{joint}' angle {angle:.2f} is outside limits ({low:.2f}, {high:.2f}).")
                 return False
     return True

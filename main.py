@@ -40,7 +40,7 @@ def main():
     try:
         arm = ArduinoController(ARM_PORT)
         camera = LogitechCamera(CAMERA_INDEX, RESOLUTION)
-        detector = ObjectDetector() # Initialize your object detector
+        detector = ObjectDetector() 
         llm = LLMController()
     except Exception as e:
         print(f"❌ Error during initialization: {e}")
@@ -63,7 +63,6 @@ def main():
                 continue
 
             # --- ADDED THIS SECTION FOR BOUNDING BOX VISUALIZATION ---
-            # This will display a window with detections in real-time
             detected_objects = detector.detect_objects(frame.copy(), show=True)
             print(f"Detected objects by YOLOv8: {detected_objects}")
             # --- END OF ADDED SECTION ---
@@ -86,7 +85,11 @@ def main():
                     print(f"⚠️ SAFETY: Target position ({x}, {y}, {z}) is outside the valid workspace.")
                     continue
                 
-                angles = calculate_ik(x, y, z)
+                # Default gripper pitch angle (e.g., 90.0 for straight down)
+                # If you want the LLM to control this, the LLM prompt and response format
+                # would need to be updated to include a 'gripper_angle' field.
+                gripper_pitch_angle = 90.0 
+                angles = calculate_ik(x, y, z, grip_angle_d=gripper_pitch_angle) # Pass grip_angle_d
                 if angles is None:
                     print(f"⚠️ KINEMATICS: Could not calculate a valid solution for position ({x}, {y}, {z}).")
                     continue

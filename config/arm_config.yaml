@@ -1,5 +1,5 @@
 # Lynxmotion arm dimensions (mm)
-base_height: 110.0
-shoulder_length: 200.0
-forearm_length: 200.0
-wrist_length: 100.0
+base_height: 80.9625
+shoulder_length: 263.525
+forearm_length: 325.4375
+wrist_length: 73.025    # Corresponds to GRIPPER length in C++ code, used in IK
