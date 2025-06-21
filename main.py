@@ -12,8 +12,8 @@ from llm.interface import LLMController
 from utils.safety import validate_position, check_joint_limits
 
 # --- Configurable Constants ---
-ARM_PORT = 'COM5'
-CAMERA_INDEX = 1
+ARM_PORT = 'COM4' # Make sure this is your correct COM port
+CAMERA_INDEX = 0  # Make sure this is your correct camera index for Logitech
 TEMP_IMAGE_PATH = "current_view.jpg"
 DEBUG_MODE = True
 RESOLUTION = (1280, 720)
@@ -40,7 +40,7 @@ def main():
     try:
         arm = ArduinoController(ARM_PORT)
         camera = LogitechCamera(CAMERA_INDEX, RESOLUTION)
-        detector = ObjectDetector()
+        detector = ObjectDetector() # Initialize your object detector
         llm = LLMController()
     except Exception as e:
         print(f"❌ Error during initialization: {e}")
@@ -61,6 +61,12 @@ def main():
             if not ret:
                 print("❌ Camera error. Could not capture frame.")
                 continue
+
+            # --- ADDED THIS SECTION FOR BOUNDING BOX VISUALIZATION ---
+            # This will display a window with detections in real-time
+            detected_objects = detector.detect_objects(frame.copy(), show=True)
+            print(f"Detected objects by YOLOv8: {detected_objects}")
+            # --- END OF ADDED SECTION ---
 
             cv2.imwrite(TEMP_IMAGE_PATH, frame)
             print("🤖 Querying LLM...")
