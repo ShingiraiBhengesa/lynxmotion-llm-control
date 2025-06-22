@@ -2,6 +2,5 @@ opencv-python
 numpy
 pyserial
 openai
-ultralytics
 python-dotenv
 pyyaml

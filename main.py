@@ -7,7 +7,7 @@ import json
 from arm_control.arduino_controller import ArduinoController
 from arm_control.kinematics import calculate_ik
 from vision.camera import LogitechCamera
-from vision.detector import ObjectDetector
+from vision.detector import ObjectDetector # Imports the updated detector
 from llm.interface import LLMController
 from utils.safety import validate_position, check_joint_limits
 
@@ -40,6 +40,7 @@ def main():
     try:
         arm = ArduinoController(ARM_PORT)
         camera = LogitechCamera(CAMERA_INDEX, RESOLUTION)
+        # Initialize ObjectDetector without YOLO-specific arguments
         detector = ObjectDetector() 
         llm = LLMController()
     except Exception as e:
@@ -62,10 +63,9 @@ def main():
                 print("❌ Camera error. Could not capture frame.")
                 continue
 
-            # --- ADDED THIS SECTION FOR BOUNDING BOX VISUALIZATION ---
+            # Detect objects using the new OpenCV-based detector
             detected_objects = detector.detect_objects(frame.copy(), show=True)
-            print(f"Detected objects by YOLOv8: {detected_objects}")
-            # --- END OF ADDED SECTION ---
+            print(f"Detected objects: {detected_objects}") # Updated print statement
 
             cv2.imwrite(TEMP_IMAGE_PATH, frame)
             print("🤖 Querying LLM...")
