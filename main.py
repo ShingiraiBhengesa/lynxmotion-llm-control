@@ -1,127 +1,105 @@
 """Main loop for robotic arm control using LLM and vision."""
 
 import cv2
-import time
-import os
-import json
-from arm_control.arduino_controller import ArduinoController
+from vision.object_detector import ObjectDetector
 from arm_control.kinematics import calculate_ik
-from vision.camera import LogitechCamera
-from vision.detector import ObjectDetector # Imports the updated detector
+from arm_control.arduino_controller import ArduinoController
 from llm.interface import LLMController
-from utils.safety import validate_position, check_joint_limits
-
-# --- Configurable Constants ---
-ARM_PORT = 'COM5' # Make sure this is your correct COM port
-CAMERA_INDEX = 1  # Make sure this is your correct camera index for Logitech
-TEMP_IMAGE_PATH = "current_view.jpg"
-DEBUG_MODE = True
-RESOLUTION = (1280, 720)
-
-def save_debug_image(frame, command, llm_response):
-    """Save debug image with LLM response overlaid."""
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    filename = f"debug/debug_{timestamp}.jpg"
-    if not os.path.exists("debug"):
-        os.makedirs("debug")
-    cv2.putText(frame, f"Command: {command}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    cv2.putText(frame, f"LLM: {json.dumps(llm_response)}", (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-    cv2.imwrite(filename, frame)
 
 def main():
-    """Main control loop for Lynxmotion arm."""
-    print("🟢 Starting Lynxmotion LLM-Control System")
+    # ✅ Initialize camera, detector, LLM, and robot arm
+    camera = cv2.VideoCapture(0)
+    detector = ObjectDetector(debug=True)
+    llm = LLMController()
+    arm = ArduinoController()
 
-    if DEBUG_MODE and not os.path.exists("debug"):
-        os.makedirs("debug")
-
-    try:
-        arm = ArduinoController(ARM_PORT)
-        camera = LogitechCamera(CAMERA_INDEX, RESOLUTION)
-        # Initialize ObjectDetector without YOLO-specific arguments
-        detector = ObjectDetector() 
-        llm = LLMController()
-    except Exception as e:
-        print(f"❌ Error during initialization: {e}")
-        print("   Please ensure the arm is connected to the correct COM port.")
-        return
-
-    print("🏠 Moving to home position...")
+    print("🤖 LLM Robotic Arm Controller Started")
     arm.home_position()
-    time.sleep(2)
 
     try:
         while True:
-            user_input = input("\nType a command (or 'quit'): ")
-            if user_input.lower() in ['quit', 'exit']:
+            # 🎥 Capture frame
+            ret, frame = camera.read()
+            if not ret:
+                print("❌ Camera frame capture failed.")
                 break
 
-            ret, frame = camera.capture_frame()
-            if not ret:
-                print("❌ Camera error. Could not capture frame.")
-                continue
+            # 🔍 Detect objects using OpenCV + camera calibration
+            detected_objects = detector.detect_objects(frame)
+            for obj in detected_objects:
+                print(f"🟢 {obj['label']} at {obj['center_mm']} mm")
 
-            # Detect objects using the new OpenCV-based detector
-            detected_objects = detector.detect_objects(frame.copy(), show=True)
-            print(f"Detected objects: {detected_objects}") # Updated print statement
+            # 🗣️ Take user input (text command)
+            user_command = input("💬 Enter command (or 'exit'): ")
+            if user_command.lower() == 'exit':
+                break
 
-            cv2.imwrite(TEMP_IMAGE_PATH, frame)
-            print("🤖 Querying LLM...")
-            command = llm.generate_command(user_input, os.path.abspath(TEMP_IMAGE_PATH))
+            # 📦 Prepare LLM input format
+            objects_seen = [
+                {
+                    "label": obj["label"],
+                    "position": {
+                        "x": round(obj["center_mm"][0], 2),
+                        "y": round(obj["center_mm"][1], 2),
+                        "z": round(obj["center_mm"][2], 2)
+                    }
+                }
+                for obj in detected_objects
+            ]
 
-            if DEBUG_MODE:
-                print("LLM Response:", json.dumps(command, indent=2))
-                save_debug_image(frame.copy(), user_input, command)
+            # ✉️ Prompt sent to LLM (GPT-4 Vision if image is supported)
+            prompt = f"""
+You are controlling a 5-DOF robotic arm in a real workspace.
 
-            if "error" in command:
-                print(f"LLM error: {command['error']}")
-                continue
+Here are the objects detected:
+{objects_seen}
 
-            if command.get("command") == "MOVE":
-                x, y, z = command["target"]
-                if not validate_position(x, y, z):
-                    print(f"⚠️ SAFETY: Target position ({x}, {y}, {z}) is outside the valid workspace.")
-                    continue
-                
-                # Default gripper pitch angle (e.g., 90.0 for straight down)
-                # If you want the LLM to control this, the LLM prompt and response format
-                # would need to be updated to include a 'gripper_angle' field.
-                gripper_pitch_angle = 90.0 
-                angles = calculate_ik(x, y, z, grip_angle_d=gripper_pitch_angle) # Pass grip_angle_d
-                if angles is None:
-                    print(f"⚠️ KINEMATICS: Could not calculate a valid solution for position ({x}, {y}, {z}).")
-                    continue
-                
-                if not check_joint_limits(angles):
-                    print("⚠️ SAFETY: Calculated angles exceed joint limits.")
-                    continue
-                
-                arm.send_command(angles)
+User command:
+\"{user_command}\"
 
-            elif command.get("command") == "GRIP":
-                gripper_state = command.get("gripper")
-                gripper_angles = {'open': 10, 'close': 80} 
-                
-                if gripper_state in gripper_angles:
-                    angle = gripper_angles[gripper_state]
-                    arm.send_command({'gripper': angle})
+Choose the correct object and return a JSON command:
+
+- For movement:
+  {{ "command": "MOVE", "target": [x, y, z] }}
+- For gripper control:
+  {{ "command": "GRIP", "gripper": "open" or "close" }}
+
+Use ONLY the object positions provided above. Do not guess.
+Only return one JSON object. Do not include explanations.
+"""
+
+            print("📤 Sending prompt to LLM...")
+            response = llm.ask(prompt, image=frame)  # Send with image if vision model is used
+            print("🤖 LLM Response:", response)
+
+            # ✅ Execute the LLM-decided action
+            if response.get("command") == "MOVE":
+                x, y, z = response["target"]
+                print(f"🎯 Moving to: {x}, {y}, {z}")
+                joint_angles = calculate_ik(x, y, z)
+
+                if joint_angles:
+                    arm.move_to(joint_angles)
+                    print("✅ Arm moved successfully.")
                 else:
-                    print(f"🤷 Unknown gripper command: {gripper_state}")
+                    print("❌ Target unreachable or outside joint limits.")
+
+            elif response.get("command") == "GRIP":
+                action = response["gripper"]
+                print(f"✊ Gripper command: {action}")
+                arm.control_gripper(action)
+
+            else:
+                print("⚠️ Invalid or unrecognized response from LLM.")
 
     except KeyboardInterrupt:
-        print("\n🛑 Interrupted by user. Stopping...")
+        print("\n🛑 Interrupted by user. Exiting...")
 
     finally:
-        print("Shutting down...")
-        if 'arm' in locals() and arm:
-            arm.emergency_stop()
-            arm.close()
-        if 'camera' in locals() and camera:
-            camera.release()
-        print("✅ Shutdown complete.")
-
+        camera.release()
+        arm.emergency_stop()
+        cv2.destroyAllWindows()
+        print("👋 Shutdown complete.")
 
 if __name__ == "__main__":
     main()
