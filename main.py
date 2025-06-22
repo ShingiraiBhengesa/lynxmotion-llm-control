@@ -5,13 +5,15 @@ from vision.object_detector import ObjectDetector
 from arm_control.kinematics import calculate_ik
 from arm_control.arduino_controller import ArduinoController
 from llm.interface import LLMController
+from utils.safety import check_joint_limits # <-- IMPORT FOR SAFETY CHECK
 
 def main():
     # ✅ Initialize camera, detector, LLM, and robot arm
     camera = cv2.VideoCapture(0)
     detector = ObjectDetector(debug=True)
     llm = LLMController()
-    arm = ArduinoController(port='/dev/ttyUSB0') # IMPORTANT: Make sure the port is correct for your system
+    # IMPORTANT: Make sure the serial port is correct for your system (e.g., 'COM3' on Windows)
+    arm = ArduinoController(port='COM5') 
 
     print("🤖 LLM Robotic Arm Controller Started")
     arm.home_position()
@@ -69,31 +71,35 @@ Only return one JSON object. Do not include explanations.
 """
 
             print("📤 Sending prompt to LLM...")
-            response = llm.ask(prompt, image=frame)  # Send with image if vision model is used
+            response = llm.ask(prompt, image=frame)
             print("🤖 LLM Response:", response)
 
             # ✅ Execute the LLM-decided action
             if response.get("command") == "MOVE":
                 x, y, z = response["target"]
-                print(f"🎯 Moving to: {x}, {y}, {z}")
+                
+                # Get speed from LLM and map to a duration value
+                speed = response.get("speed", "normal")
+                duration_map = {"slow": 4.0, "normal": 2.0, "fast": 1.0}
+                duration = duration_map.get(speed, 2.0)
+
+                print(f"🎯 Moving to: {x}, {y}, {z} at {speed} speed.")
                 joint_angles = calculate_ik(x, y, z)
 
                 if joint_angles:
-                    # This call now executes the smooth trajectory planning
-                    arm.move_to(joint_angles)
-                    print("✅ Arm moved successfully.")
+                    # Check joint limits before telling the arm to move
+                    if check_joint_limits(joint_angles):
+                        arm.move_to(joint_angles, duration=duration)
+                        print("✅ Arm moved successfully.")
+                    else:
+                        print("❌ SAFETY: Move aborted. Calculated joint angles are outside safe limits.")
                 else:
                     print("❌ Target unreachable or outside joint limits.")
 
             elif response.get("command") == "GRIP":
                 action = response["gripper"]
-                print(f"✊ Gripper command: {action}")
-                # You may want a smooth gripper control as well, e.g., arm.control_gripper(action, speed='slow')
-                # For now, we assume direct command is fine for the gripper.
-                if action == "open":
-                    arm.move_to({'gripper': 0}) # Gripper open angle
-                else:
-                    arm.move_to({'gripper': 100}) # Gripper close angle
+                # Use the dedicated, cleaner gripper control method
+                arm.control_gripper(action)
 
             else:
                 print("⚠️ Invalid or unrecognized response from LLM.")
