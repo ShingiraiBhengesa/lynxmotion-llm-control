@@ -1,18 +1,20 @@
-# Lynxmotion Robotic Arm Control with LLM and Vision
+# 🦾 Lynxmotion LLM-Control
 
-This project enables natural language control of a Lynxmotion robotic arm using a custom Arduino-based controller, a Large Language Model (OpenAI's GPT-4), and real-time computer vision.
+Control a 5-DOF Lynxmotion robotic arm using natural language commands and vision-based object recognition powered by OpenCV and GPT-4 (Vision).
 
-The system interprets commands like "pick up the red block" by analyzing a live camera feed and generating the correct robotic movements.
+---
 
 ## Features
 
--   Voice/text command processing via LLM (OpenAI GPT-4 Vision)
--   Real-time object detection with YOLOv8
--   Inverse kinematics for a 5-DOF robotic arm
--   Control of an Arduino-based servo controller
--   Safety checks for workspace and joint limits
--   Visual debugging system
+- **Real-time object detection** using OpenCV and color segmentation
+- **3D pixel-to-world coordinate transformation** using chessboard camera calibration
+- **Inverse kinematics** for 5-DOF Lynxmotion arm
+- **Arduino serial control** via SSC-32U servo controller
+- **LLM-powered natural language interface** with GPT-4 (Vision)
+- **Safety limits** for robot joint angles and workspace bounds
+- **Debug mode** with visual overlays and annotated logs
 
+---
 ## Hardware Requirements
 
 1.  **Lynxmotion Robotic Arm** with standard PWM servos.
