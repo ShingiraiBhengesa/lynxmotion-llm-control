@@ -1,3 +1,4 @@
+"This script captures a chessboard image, detects corners, and calibrates the camera."
 import cv2
 import numpy as np
 import os
@@ -80,4 +81,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# This script captures a chessboard image, detects corners, and calibrates the camera.
