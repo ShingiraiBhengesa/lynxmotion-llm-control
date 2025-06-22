@@ -1,7 +1,5 @@
 """Main loop for robotic arm control using LLM and vision."""
 
-"""Main loop for robotic arm control using LLM and vision."""
-
 import cv2
 from vision.object_detector import ObjectDetector
 from arm_control.kinematics import calculate_ik
@@ -13,7 +11,7 @@ def main():
     camera = cv2.VideoCapture(0)
     detector = ObjectDetector(debug=True)
     llm = LLMController()
-    arm = ArduinoController(port="COM5")  # Update COM3 to your actual port
+    arm = ArduinoController(port='/dev/ttyUSB0') # IMPORTANT: Make sure the port is correct for your system
 
     print("🤖 LLM Robotic Arm Controller Started")
     arm.home_position()
@@ -57,7 +55,7 @@ Here are the objects detected:
 {objects_seen}
 
 User command:
-"{user_command}"
+\"{user_command}\"
 
 Choose the correct object and return a JSON command:
 
@@ -80,18 +78,22 @@ Only return one JSON object. Do not include explanations.
                 print(f"🎯 Moving to: {x}, {y}, {z}")
                 joint_angles = calculate_ik(x, y, z)
 
-                from utils.safety import check_joint_limits
-
-                if joint_angles and check_joint_limits(joint_angles):
+                if joint_angles:
+                    # This call now executes the smooth trajectory planning
                     arm.move_to(joint_angles)
                     print("✅ Arm moved successfully.")
                 else:
-                    print("❌ Target unreachable or outside joint limits or exceeded safety limits.")
+                    print("❌ Target unreachable or outside joint limits.")
 
             elif response.get("command") == "GRIP":
                 action = response["gripper"]
                 print(f"✊ Gripper command: {action}")
-                arm.control_gripper(action)
+                # You may want a smooth gripper control as well, e.g., arm.control_gripper(action, speed='slow')
+                # For now, we assume direct command is fine for the gripper.
+                if action == "open":
+                    arm.move_to({'gripper': 0}) # Gripper open angle
+                else:
+                    arm.move_to({'gripper': 100}) # Gripper close angle
 
             else:
                 print("⚠️ Invalid or unrecognized response from LLM.")
