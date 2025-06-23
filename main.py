@@ -18,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     # Load arm config for IK adjustments
-    config_path = os.getenv('ARM_CONFIG_PATH', 'arm/arm_config.yaml')
+    config_path = os.getenv('ARM_CONFIG_PATH', 'confing/arm_config.yaml')
     with open(config_path) as f:
         config = yaml.safe_load(f)
 

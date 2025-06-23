@@ -15,7 +15,7 @@ def validate_position(x, y, z):
 
 def check_joint_limits(angles):
     """Ensure angles are within safe limits."""
-    limits_path = os.path.join(os.path.dirname(__file__), '../arm/joint_limits.json')
+    limits_path = os.path.join(os.path.dirname(__file__), '../config/joint_limits.json')
     if not os.path.exists(limits_path):
         raise FileNotFoundError(f"Joint limits file {limits_path} not found.")
     limits = json.load(open(limits_path))

@@ -22,7 +22,7 @@ def calculate_ik(x, y, z, grip_angle_d=90.0):
             raise ValueError(f"Z-coordinate {z} is below minimum (10mm)")
 
         # Load dimensions from config
-        config_path = os.getenv('ARM_CONFIG_PATH', os.path.abspath(os.path.join(os.path.dirname(__file__), '../arm/arm_config.yaml')))
+        config_path = os.getenv('ARM_CONFIG_PATH', os.path.abspath(os.path.join(os.path.dirname(__file__), '../config/arm_config.yaml')))
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file {config_path} not found")
         with open(config_path) as f:
