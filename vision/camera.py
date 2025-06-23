@@ -7,23 +7,24 @@ import os
 class LogitechCamera:
     """Simple webcam wrapper using OpenCV."""
 
-    def __init__(self, camera_index=0, resolution=(1280, 720)):
+    def __init__(self, camera_index=0, resolution=(1280, 720), calibration_path='config/camera_calibration.npz'):
         """
         Args:
             camera_index (int): Usually 0 for internal or first USB cam.
             resolution (tuple): (width, height)
+            calibration_path (str): Path to intrinsic calibration file (.npz).
         """
         self.cap = cv2.VideoCapture(camera_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
-        self.calibration_data = self._load_calibration()
+        self.calibration_data = self._load_calibration(calibration_path)
 
-    def _load_calibration(self):
+    def _load_calibration(self, path):
         """Load camera intrinsics for undistortion."""
-        path = os.path.join(os.path.dirname(__file__), '../config/camera_calibration.npz')
         if os.path.exists(path):
             data = np.load(path)
             return data['mtx'], data['dist']
+        print(f"⚠️ Calibration file {path} not found. Undistortion disabled.")
         return None, None
 
     def capture_frame(self, undistort=True):

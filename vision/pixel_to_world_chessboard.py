@@ -1,22 +1,43 @@
+"""Converts 2D pixel coordinates to 3D world coordinates using camera calibration."""
+
 import numpy as np
 import cv2
 
-def load_camera_calibration(path='config/camera_pose.npz'):
-    data = np.load(path)
-    return data['camera_matrix'], data['dist_coeffs'], data['rvec'], data['tvec']
-
-def pixel_to_world_3D(pixel, camera_matrix, dist_coeffs, rvec, tvec, z_world=0):
+def load_camera_calibration(intrinsic_path='config/camera_calibration.npz', extrinsic_path='config/camera_pose.npz'):
     """
-    Convert a 2D pixel to a 3D world coordinate at a given Z height (e.g., table level).
+    Load intrinsic and extrinsic calibration parameters.
 
     Args:
-        pixel (tuple): (x, y) pixel coordinates
-        camera_matrix, dist_coeffs, rvec, tvec: calibration data
-        z_world (float): Z height in mm (e.g., 0 = table)
+        intrinsic_path (str): Path to intrinsic calibration (.npz).
+        extrinsic_path (str): Path to extrinsic calibration (.npz).
 
     Returns:
-        tuple: (X, Y, Z) world coordinate in mm
+        tuple: (camera_matrix, dist_coeffs, rvec, tvec)
     """
+    try:
+        intrinsics = np.load(intrinsic_path)
+        extrinsics = np.load(extrinsic_path)
+        return intrinsics['mtx'], intrinsics['dist'], extrinsics['rvec'], extrinsics['tvec']
+    except (FileNotFoundError, KeyError) as e:
+        raise RuntimeError(f"Calibration load failed: {e}")
+
+def pixel_to_world_3D(pixel, camera_matrix, dist_coeffs, rvec, tvec, z_world=0.0):
+    """
+    Convert a 2D pixel to a 3D world coordinate at a given Z height.
+
+    Args:
+        pixel (tuple): (x, y) pixel coordinates.
+        camera_matrix, dist_coeffs, rvec, tvec: Calibration data.
+        z_world (float): Z height in mm (e.g., table surface).
+
+    Returns:
+        tuple: (X, Y, Z) world coordinate in mm.
+    """
+    if not isinstance(pixel, (tuple, list)) or len(pixel) != 2:
+        raise ValueError("Pixel must be a (x, y) tuple")
+    if any(x is None for x in [camera_matrix, dist_coeffs, rvec, tvec]):
+        raise ValueError("Invalid camera calibration data")
+
     px = np.array([[pixel]], dtype=np.float32)  # shape: (1, 1, 2)
     undistorted = cv2.undistortPoints(px, camera_matrix, dist_coeffs, P=camera_matrix)
 

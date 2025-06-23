@@ -1,42 +1,55 @@
 """Main loop for robotic arm control using LLM and vision."""
 
 import cv2
+import argparse
+import time
+import yaml
+import os
+from vision.camera import LogitechCamera
 from vision.object_detector import ObjectDetector
 from arm_control.kinematics import calculate_ik
 from arm_control.arduino_controller import ArduinoController
 from llm.interface import LLMController
-from utils.safety import check_joint_limits # <-- IMPORT FOR SAFETY CHECK
+from utils.safety import check_joint_limits, validate_position
 
 def main():
-    # ✅ Initialize camera, detector, LLM, and robot arm
-    camera = cv2.VideoCapture(0)
+    parser = argparse.ArgumentParser(description="LLM Robotic Arm Controller")
+    parser.add_argument('--port', default='COM5', help='Arduino serial port')
+    args = parser.parse_args()
+
+    # Load arm config for IK adjustments
+    config_path = os.getenv('ARM_CONFIG_PATH', 'arm/arm_config.yaml')
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    # Initialize components
+    camera = LogitechCamera()
     detector = ObjectDetector(debug=True)
     llm = LLMController()
-    # IMPORTANT: Make sure the serial port is correct for your system (e.g., 'COM3' on Windows)
-    arm = ArduinoController(port='COM5') 
+    arm = ArduinoController(port=args.port)
 
     print("🤖 LLM Robotic Arm Controller Started")
     arm.home_position()
 
     try:
         while True:
-            # 🎥 Capture frame
-            ret, frame = camera.read()
+            # Capture frame
+            ret, frame = camera.capture_frame()
             if not ret:
                 print("❌ Camera frame capture failed.")
                 break
 
-            # 🔍 Detect objects using OpenCV + camera calibration
+            # Detect objects
             detected_objects = detector.detect_objects(frame)
             for obj in detected_objects:
                 print(f"🟢 {obj['label']} at {obj['center_mm']} mm")
 
-            # 🗣️ Take user input (text command)
+            # Get user command
             user_command = input("💬 Enter command (or 'exit'): ")
             if user_command.lower() == 'exit':
                 break
 
-            # 📦 Prepare LLM input format
+            # Prepare LLM input
             objects_seen = [
                 {
                     "label": obj["label"],
@@ -49,60 +62,85 @@ def main():
                 for obj in detected_objects
             ]
 
-            # ✉️ Prompt sent to LLM (GPT-4 Vision if image is supported)
             prompt = f"""
 You are controlling a 5-DOF robotic arm in a real workspace.
 
-Here are the objects detected:
+Objects detected:
 {objects_seen}
 
 User command:
-\"{user_command}\"
+"{user_command}"
 
-Choose the correct object and return a JSON command:
+Return a JSON command:
+- Movement: {{"command": "MOVE", "target": [x,y,z], "speed": "slow"|"normal"|"fast"}}
+- Gripper: {{"command": "GRIP", "gripper": "open"|"close"}}
 
-- For movement:
-  {{ "command": "MOVE", "target": [x, y, z] }}
-- For gripper control:
-  {{ "command": "GRIP", "gripper": "open" or "close" }}
-
-Use ONLY the object positions provided above. Do not guess.
-Only return one JSON object. Do not include explanations.
+Use ONLY provided positions. Return ONE JSON object.
 """
 
-            print("📤 Sending prompt to LLM...")
-            response = llm.ask(prompt, image=frame)
-            print("🤖 LLM Response:", response)
+            # Query LLM with timeout
+            try:
+                start_time = time.time()
+                response = llm.ask(prompt, image=frame)
+                if time.time() - start_time > 2.0:
+                    print("⚠️ LLM timeout, skipping.")
+                    continue
+            except Exception as e:
+                print(f"⚠️ LLM error: {e}, trying text-only...")
+                response = llm.ask_text_only(prompt)
 
-            # ✅ Execute the LLM-decided action
-            if response.get("command") == "MOVE":
+            # Validate response
+            if not isinstance(response, dict) or "command" not in response:
+                print("⚠️ Invalid LLM response format.")
+                continue
+            if "error" in response:
+                print(f"⚠️ LLM error: {response['error']}")
+                continue
+
+            if response["command"] == "MOVE":
+                if not (isinstance(response.get("target"), list) and len(response["target"]) == 3):
+                    print("⚠️ Invalid MOVE target.")
+                    continue
                 x, y, z = response["target"]
-                
-                # Get speed from LLM and map to a duration value
+                if not validate_position(x, y, z):
+                    print("❌ Target outside safe workspace.")
+                    continue
+
+                # Try IK with default gripper angle
+                joint_angles = calculate_ik(x, y, z, grip_angle_d=90.0)
+                if not joint_angles:
+                    # Adjust z to account for base and gripper
+                    adjusted_z = z + config['base_height'] + config['wrist_length']
+                    print(f"⚠️ Retrying with adjusted z={adjusted_z:.2f}mm")
+                    joint_angles = calculate_ik(x, y, adjusted_z, grip_angle_d=90.0)
+                    if not joint_angles:
+                        print("❌ Target unreachable with downward gripper.")
+                        continue
+
+                # Map speed to duration
                 speed = response.get("speed", "normal")
                 duration_map = {"slow": 4.0, "normal": 2.0, "fast": 1.0}
                 duration = duration_map.get(speed, 2.0)
 
-                print(f"🎯 Moving to: {x}, {y}, {z} at {speed} speed.")
-                joint_angles = calculate_ik(x, y, z)
+                # Validate joint angles before moving
+                if not check_joint_limits(joint_angles):
+                    print("❌ Joint limits exceeded. Command aborted.")
+                    continue
 
-                if joint_angles:
-                    # Check joint limits before telling the arm to move
-                    if check_joint_limits(joint_angles):
-                        arm.move_to(joint_angles, duration=duration)
-                        print("✅ Arm moved successfully.")
-                    else:
-                        print("❌ SAFETY: Move aborted. Calculated joint angles are outside safe limits.")
-                else:
-                    print("❌ Target unreachable or outside joint limits.")
+                print(f"🎯 Moving to: ({x}, {y}, {z}) at {speed} speed.")
+                arm.move_to(joint_angles, duration=duration)
+                print("✅ Arm moved successfully.")
 
-            elif response.get("command") == "GRIP":
-                action = response["gripper"]
-                # Use the dedicated, cleaner gripper control method
+            elif response["command"] == "GRIP":
+                action = response.get("gripper")
+                if action not in ["open", "close"]:
+                    print("⚠️ Invalid GRIPPER action.")
+                    continue
                 arm.control_gripper(action)
+                print(f"✅ Gripper {action}.")
 
             else:
-                print("⚠️ Invalid or unrecognized response from LLM.")
+                print("⚠️ Unrecognized command.")
 
     except KeyboardInterrupt:
         print("\n🛑 Interrupted by user. Exiting...")
@@ -110,6 +148,7 @@ Only return one JSON object. Do not include explanations.
     finally:
         camera.release()
         arm.emergency_stop()
+        arm.close()
         cv2.destroyAllWindows()
         print("👋 Shutdown complete.")
 
