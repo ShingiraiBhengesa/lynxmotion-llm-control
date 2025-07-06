@@ -22,7 +22,7 @@ def calculate_ik(x, y, z, grip_angle_d=90.0):
             raise ValueError(f"Z-coordinate {z} is below minimum (10mm)")
 
         # Load dimensions from config
-        config_path = os.getenv('ARM_CONFIG_PATH', os.path.abspath(os.path.join(os.path.dirname(__file__), '../config/arm_config.yaml')))
+        config_path = os.getenv('ARM_CONFIG_PATH', os.path.join(os.path.dirname(__file__), '../config/arm_config.yaml'))
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file {config_path} not found")
         with open(config_path) as f:
@@ -57,27 +57,27 @@ def calculate_ik(x, y, z, grip_angle_d=90.0):
         
         # Shoulder to wrist distance
         s_w_sq = wrist_z * wrist_z + wrist_y * wrist_y
+        if s_w_sq < 0:
+            raise ValueError("Invalid shoulder-to-wrist distance (negative square)")
         s_w = math.sqrt(s_w_sq)
         
         # Check reachability
         max_reach = HUMERUS + ULNA
         min_reach = abs(HUMERUS - ULNA)
         if s_w > max_reach or s_w < min_reach:
-            raise ValueError(f"Position ({x}, {y}, {z}) is unreachable. (s_w={s_w:.2f}, Max={max_reach:.2f}, Min={min_reach:.2f})")
+            raise ValueError(f"Position ({x:.2f}, {y:.2f}, {z:.2f}) is unreachable. (s_w={s_w:.2f}, Max={max_reach:.2f}, Min={min_reach:.2f})")
             
         # Shoulder angle
         a1 = math.atan2(wrist_z, wrist_y)
         a2_arg = (hum_sq - uln_sq + s_w_sq) / (2 * HUMERUS * s_w)
-        if not -1 <= a2_arg <= 1:
-            raise ValueError(f"Invalid shoulder angle argument: {a2_arg}")
+        a2_arg = max(min(a2_arg, 1.0), -1.0)  # Clip to [-1, 1]
         a2 = math.acos(a2_arg)
         shl_angle_r = a1 + a2
         shl_angle_d = math.degrees(shl_angle_r)
         
         # Elbow angle
         elb_arg = (hum_sq + uln_sq - s_w_sq) / (2 * HUMERUS * ULNA)
-        if not -1 <= elb_arg <= 1:
-            raise ValueError(f"Invalid elbow angle argument: {elb_arg}")
+        elb_arg = max(min(elb_arg, 1.0), -1.0)  # Clip to [-1, 1]
         elb_angle_r = math.acos(elb_arg)
         elb_angle_d = math.degrees(elb_angle_r)
         elb_angle_dn = -(180.0 - elb_angle_d)
@@ -98,8 +98,9 @@ def calculate_ik(x, y, z, grip_angle_d=90.0):
             print("❌ IK solution outside joint limits.")
             return None
 
+        print(f"✅ IK solution: {angles}")
         return angles
         
     except Exception as e:
-        print(f"IK Error: {str(e)}")
+        print(f"❌ IK Error: {str(e)}")
         return None

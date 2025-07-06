@@ -10,15 +10,24 @@ from utils.safety import check_joint_limits
 
 class ArduinoController:
     def __init__(self, port, baudrate=115200):
+        """
+        Initialize serial connection to Arduino.
+
+        Args:
+            port (str): Serial port (e.g., 'COM5').
+            baudrate (int): Baud rate (default 115200).
+        """
         try:
             self.ser = serial.Serial(port, baudrate, timeout=1)
+            self.ser.flush()  # Clear buffers
             time.sleep(2)  # Wait for Arduino to initialize
             self.current_angles = {'base': 90, 'shoulder': 90, 'elbow': 90, 'wrist': 90, 'gripper': 90}
-            print("✅ Arduino Controller Initialized.")
+            print(f"✅ Arduino Controller Initialized on {port}")
         except serial.SerialException as e:
             raise RuntimeError(f"Failed to open serial port {port}: {e}")
 
     def _get_channel_id(self, joint_name):
+        """Map joint names to servo IDs."""
         id_map = {
             'base': 1,
             'shoulder': 2,
@@ -29,15 +38,20 @@ class ArduinoController:
         return id_map.get(joint_name)
 
     def move_to(self, target_angles, duration=2.0):
+        """
+        Smoothly move to target joint angles.
+
+        Args:
+            target_angles (dict): Joint angles in degrees.
+            duration (float): Movement duration in seconds.
+        """
         if duration <= 0:
             raise ValueError("Duration must be positive")
         if not check_joint_limits(target_angles):
             print("❌ Move aborted: Joint angles outside safe limits.")
             return
-        print(f"🤖 Starting smooth move to {target_angles} over {duration}s...")
-        steps = int(duration * 25)
-        if steps == 0:
-            steps = 1
+        print(f"🤖 Moving to {target_angles} over {duration}s...")
+        steps = max(1, int(duration * 25))  # Ensure at least 1 step
         start_angles = self.current_angles.copy()
         for step in range(1, steps + 1):
             interpolated_angles = {}
@@ -53,27 +67,34 @@ class ArduinoController:
         print("✅ Move complete.")
 
     def _send_raw_command(self, angles):
+        """Send raw servo commands to Arduino."""
         try:
             for joint, angle in angles.items():
                 servo_id = self._get_channel_id(joint)
                 if servo_id:
-                    # Clamp to [0, 180] for non-gripper joints only
+                    # Clamp to [0, 180] for non-gripper joints
                     safe_angle = angle if joint == 'gripper' else max(0, min(180, angle))
                     angle_val = int(round(safe_angle * 10))
                     command = f"#{servo_id}D{angle_val}\r"
                     self.ser.write(command.encode())
-            time.sleep(0.01)
+                    self.ser.flush()  # Ensure command is sent
+            time.sleep(0.01)  # Brief pause for Arduino processing
         except serial.SerialException as e:
             print(f"⚠️ Serial communication error: {e}")
 
     def home_position(self):
+        """Move to home position (all joints at 90°)."""
         print("🏠 Moving to home position...")
         home_angles = {'base': 90, 'shoulder': 90, 'elbow': 90, 'wrist': 90, 'gripper': 90}
         self.move_to(home_angles, duration=2.0)
 
     def control_gripper(self, action, duration=0.5):
         """
-        Controls the gripper with a smooth motion.
+        Control the gripper with smooth motion.
+
+        Args:
+            action (str): 'open' or 'close'.
+            duration (float): Movement duration in seconds.
         """
         if action == "open":
             print("🖐️ Opening gripper...")
@@ -85,15 +106,19 @@ class ArduinoController:
             print(f"⚠️ Unknown gripper action: {action}")
 
     def emergency_stop(self):
+        """Send emergency stop to all servos."""
         print("🛑 Emergency stop called.")
         try:
-            # Send stop command to all servos (assumes Arduino supports 'S' command)
-            self.ser.write(b"#1S0#2S0#3S0#4S0#5S0\r")
+            # Send neutral position commands instead of 'S' (safer fallback)
+            home_angles = {'base': 90, 'shoulder': 90, 'elbow': 90, 'wrist': 90, 'gripper': 90}
+            self._send_raw_command(home_angles)
+            self.ser.flush()
             time.sleep(0.1)
         except serial.SerialException as e:
             print(f"⚠️ Serial error during emergency stop: {e}")
 
     def close(self):
+        """Close the serial port."""
         if self.ser and self.ser.is_open:
             self.ser.close()
             print("🔌 Serial port closed.")
