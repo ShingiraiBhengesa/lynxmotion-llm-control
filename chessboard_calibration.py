@@ -12,24 +12,39 @@ SAVE_PATH = 'config/camera_pose.npz'
 
 def load_intrinsics(path='config/camera_calibration.npz'):
     """Load intrinsic calibration parameters."""
-    if os.path.exists(path):
+    try:
         data = np.load(path)
         return data['mtx'], data['dist']
-    raise FileNotFoundError("Intrinsic calibration file not found. Run calibrate_camera.py first.")
+    except FileNotFoundError:
+        print(f"❌ Intrinsic calibration file {path} not found. Run calibrate_camera.py first.")
+        return None, None
 
 def generate_object_points():
     """Create 3D points for chessboard corners in mm."""
-    objp = np.zeros((CHESSBOARD_SIZE[0]*CHESSBOARD_SIZE[1], 3), np.float32)
-    objp[:, :2] = np.mgrid[0:CHESSBOARD_SIZE[0], 0:CHESSBOARD_SIZE[1]].T.reshape(-1, 2)
-    objp *= SQUARE_SIZE_MM
+    objp = np.zeros((CHESSBOARD_SIZE[0] * CHESSBOARD_SIZE[1], 3), np.float32)
+    objp[:, :2] = np.mgrid[0:CHESSBOARD_SIZE[0], 0:CHESSBOARD_SIZE[1]].T.reshape(-1, 2) * SQUARE_SIZE_MM
     return objp
+
+def draw_axes(img, rvec, tvec, camera_matrix, dist_coeffs):
+    """Draw 3D axes on the image for pose visualization."""
+    axis = np.float32([[0, 0, 0], [50, 0, 0], [0, 50, 0], [0, 0, 50]]).reshape(-1, 3)
+    imgpts, _ = cv2.projectPoints(axis, rvec, tvec, camera_matrix, dist_coeffs)
+    imgpts = imgpts.astype(int)
+    img = cv2.line(img, tuple(imgpts[0].ravel()), tuple(imgpts[1].ravel()), (0, 0, 255), 3)  # X-axis (red)
+    img = cv2.line(img, tuple(imgpts[0].ravel()), tuple(imgpts[2].ravel()), (0, 255, 0), 3)  # Y-axis (green)
+    img = cv2.line(img, tuple(imgpts[0].ravel()), tuple(imgpts[3].ravel()), (255, 0, 0), 3)  # Z-axis (blue)
+    return img
 
 def main():
     """Capture a chessboard image and compute extrinsic parameters."""
     camera_matrix, dist_coeffs = load_intrinsics()
-    camera = LogitechCamera()
-    
-    print("📸 Press SPACE to capture a calibration frame, Q to quit...")
+    if camera_matrix is None or dist_coeffs is None:
+        return
+
+    camera = LogitechCamera(resolution=(640, 480))
+    print(f"📸 Show a {CHESSBOARD_SIZE[0]}x{CHESSBOARD_SIZE[1]} chessboard ({SQUARE_SIZE_MM}mm squares).")
+    print("Press SPACE to capture a calibration frame, Q to quit...")
+
     while True:
         ret, frame = camera.capture_frame(undistort=False)
         if not ret:
@@ -48,43 +63,48 @@ def main():
             return
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    found, corners = cv2.findChessboardCorners(gray, CHESSBOARD_SIZE, None)
+    ret, corners = cv2.findChessboardCorners(gray, CHESSBOARD_SIZE,
+                                            flags=cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK)
 
-    if not found:
-        print("❌ Chessboard not found.")
+    if not ret:
+        print("❌ Chessboard not found. Ensure it’s fully visible and well-lit.")
         camera.release()
         cv2.destroyAllWindows()
         return
 
     print("✅ Chessboard detected. Calibrating...")
     objp = generate_object_points()
-    corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1),
-                                criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
+    corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1),
+                              criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
     
     # Compute extrinsics
-    ret, rvec, tvec = cv2.solvePnP(objp, corners2, camera_matrix, dist_coeffs)
-    
+    ret, rvec, tvec = cv2.solvePnP(objp, corners, camera_matrix, dist_coeffs)
+    if not ret:
+        print("❌ Failed to compute extrinsics.")
+        camera.release()
+        cv2.destroyAllWindows()
+        return
+
     # Check reprojection error
     projected, _ = cv2.projectPoints(objp, rvec, tvec, camera_matrix, dist_coeffs)
-    error = cv2.norm(corners2, projected, cv2.NORM_L2) / len(projected)
+    error = cv2.norm(corners, projected, cv2.NORM_L2) / len(projected)
     print(f"📏 Reprojection error: {error:.3f} pixels")
     if error > 0.5:
-        print("⚠️ Warning: High reprojection error, consider re-capturing.")
+        print("⚠️ Warning: High reprojection error, consider re-capturing with better lighting or angles.")
 
     # Save calibration
     os.makedirs(os.path.dirname(SAVE_PATH), exist_ok=True)
-    np.savez(SAVE_PATH, camera_matrix=camera_matrix, dist_coeffs=dist_coeffs, rvec=rvec, tvec=tvec)
+    np.savez(SAVE_PATH, rvec=rvec, tvec=tvec)
     print(f"✅ Calibration saved to {SAVE_PATH}")
-    print("Camera Matrix:\n", camera_matrix)
-    print("Distortion Coefficients:\n", dist_coeffs)
-    print("rvec (rotation vector):\n", rvec)
-    print("tvec (translation vector):\n", tvec)
+    print("Rotation Vector (rvec):\n", rvec)
+    print("Translation Vector (tvec):\n", tvec)
 
-    # Preview
-    frame_with_corners = cv2.drawChessboardCorners(frame, CHESSBOARD_SIZE, corners2, found)
-    cv2.imshow('Detected Corners', frame_with_corners)
+    # Preview with axes
+    frame_with_corners = cv2.drawChessboardCorners(frame, CHESSBOARD_SIZE, corners, ret)
+    frame_with_axes = draw_axes(frame_with_corners, rvec, tvec, camera_matrix, dist_coeffs)
+    cv2.imshow('Detected Corners and Axes', frame_with_axes)
     cv2.waitKey(0)
-    
+
     camera.release()
     cv2.destroyAllWindows()
 
