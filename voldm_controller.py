@@ -7,7 +7,6 @@ from vision.pixel_to_world_chessboard import pixel_to_world_3D, load_camera_cali
 import json
 import os
 import time
-from datetime import datetime
 
 class VLMController:
     def __init__(self, model_name="microsoft/Florence-2-base", min_area=500, debug=True):
@@ -42,8 +41,8 @@ class VLMController:
         # Convert frame to RGB for PIL
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         
-        # Refined prompt to minimize echoing and ensure detection
-        prompt = "Detect and return only the names of colored objects (red, green, blue, yellow) present in the image, separated by commas."
+        # Use a detection-specific prompt for Florence-2
+        prompt = "Detect colored objects (red, green, blue, yellow) and provide labels and approximate bounding box coordinates if possible."
         inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
         
         # Generate model output
@@ -63,20 +62,38 @@ class VLMController:
         # Initialize list for detected objects
         detected_objects = []
         
-        # Attempt to parse Florence-2's text output
+        # Attempt to parse Florence-2's text output (placeholder logic)
         try:
-            if any(color in generated_text.lower() for color in ["red", "green", "blue", "yellow"]):
+            if "objects:" in generated_text.lower() or "object:" in generated_text.lower():
+                # Assume output might list objects with optional coordinates (e.g., "red object at (100,200)")
                 text = generated_text.lower()
-                # Split by commas, filter out prompt-like text
-                object_list = [x.strip() for x in text.split(",") if any(color in x for color in ["red", "green", "blue", "yellow"]) and not any(keyword in x for keyword in ["detect", "return", "list", "names", "present", "image"])]
+                if "objects:" in text:
+                    object_text = text.split("objects:")[1]
+                elif "object:" in text:
+                    object_text = text.split("object:")[1]
+                else:
+                    object_text = text
+                
+                object_list = object_text.replace("[", "").replace("]", "").split(",")
                 for obj in object_list:
-                    label = obj.strip()
-                    if not label or label not in ["red", "green", "blue", "yellow"]:
+                    obj = obj.strip()
+                    parts = obj.split(" at ")
+                    label = parts[0].strip() if len(parts) > 0 else "unknown"
+                    if label not in ["red", "green", "blue", "yellow"]:
                         continue
                     
-                    # Default to frame center since coordinates aren't provided
-                    cx, cy = frame.shape[1] / 2, frame.shape[0] / 2
-                    w, h = 50, 50  # Placeholder width and height
+                    # Approximate coordinates if provided
+                    cx, cy = frame.shape[1] / 2, frame.shape[0] / 2  # Default to frame center
+                    if len(parts) > 1:
+                        coords = parts[1].strip("()").split(",")
+                        if len(coords) == 2:
+                            try:
+                                cx, cy = map(float, coords)
+                            except ValueError:
+                                print(f"Invalid coordinates for {label}: {coords}")
+
+                    # Calculate bounding box (approximate from center)
+                    w, h = 50, 50  # Placeholder width and height; adjust based on output
                     x, y = int(cx - w / 2), int(cy - h / 2)
                     area = w * h
                     if area < self.min_area:
@@ -111,29 +128,6 @@ class VLMController:
             cv2.imwrite(f"debug_images/detection_{int(time.time())}.jpg", frame_copy)
 
         return detected_objects
-
-    def process_command(self, command):
-        """
-        Process a command (e.g., move to an object).
-        Args:
-            command (str): Command string (e.g., "move to red object").
-        """
-        print(f"Processing command: {command}")
-        # Placeholder: Add logic to interface with the arm (e.g., via serial)
-        import cv2
-        cap = cv2.VideoCapture(0)
-        ret, frame = cap.read()
-        if ret:
-            objects = self.detect_objects(frame)
-            for obj in objects:
-                if obj["label"].lower() in command.lower():
-                    print(f"Moving to {obj['label']} at {obj['center_mm']} at {datetime.now().strftime('%I:%M %p %Z, %m/%d/%Y')}")
-                    # Add arm movement code here (e.g., serial command to Arduino)
-                    break
-            cap.release()
-        else:
-            print(f"Failed to capture frame for command processing at {datetime.now().strftime('%I:%M %p %Z, %m/%d/%Y')}")
-            cap.release()
 
     def plan_action(self, user_command, frame, detected_objects):
         """
@@ -203,6 +197,6 @@ if __name__ == "__main__":
         vlm = VLMController(debug=True)
         objects = vlm.detect_objects(frame)
         for obj in objects:
-            print(f"Detected: {obj['label']} at {obj['center_mm']} at {datetime.now().strftime('%I:%M %p %Z, %m/%d/%Y')}")
+            print(f"Detected: {obj['label']} at {obj['center_mm']} at 03:06 PM CDT, 07/06/2025")
         command = vlm.plan_action("move to red_object", frame, objects)
         print(f"Planned action: {command}")

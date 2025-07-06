@@ -7,7 +7,7 @@ from vision.camera import LogitechCamera
 
 # Chessboard dimensions
 CHESSBOARD_SIZE = (9, 6)
-SQUARE_SIZE_MM = 30.0  # mm per square
+SQUARE_SIZE_MM = 29.7  # mm per square
 SAVE_PATH = 'config/camera_pose.npz'
 
 def load_intrinsics(path='config/camera_calibration.npz'):
