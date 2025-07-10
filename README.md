@@ -1,4 +1,4 @@
-# 🦾 Lynxmotion LLM-Control
+# 🦾 VLM Robotic Control
 
 Control a 5-DOF Lynxmotion robotic arm using natural language commands, with object detection and task planning powered by the Florence-2 vision-language model (via Hugging Face `transformers`).
 
