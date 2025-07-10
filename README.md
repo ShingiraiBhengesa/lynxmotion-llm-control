@@ -33,7 +33,7 @@ Control a 5-DOF Lynxmotion robotic arm using natural language commands and visio
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/ShingiraiBhengesa/lynxmotion-llm-control.git
+git clone https://github.com/ShingiraiBhengesa/vlm-robotic-control.git
 cd lynxmotion-llm-control
 ```
 ### 2. Install Dependencies
