@@ -1,4 +1,4 @@
-# 🦾 Robotic VLM-Control
+# 🦾 VLM-Robotic-Control
 
 Control a 5-DOF Lynxmotion robotic arm using natural language commands and vision-based object recognition powered by OpenCV and GPT-4 (Vision).
 
